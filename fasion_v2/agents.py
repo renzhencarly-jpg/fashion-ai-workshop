@@ -3,7 +3,7 @@
 LangGraph workflow for the Shopping Guide AI (v2).
 
 Single node:
-  discover -> product retrieval (memory + regional trending + hybrid search + rerank)
+  discover -> product retrieval (preferences + regional trending + hybrid search + rerank)
 
 checkout_agent is invoked directly by a UI button (not a graph node). It places an
 order for the products the user selected from the search results.
@@ -21,10 +21,7 @@ from langgraph.checkpoint.mongodb import MongoDBSaver
 from clients import db, mongodb_client
 from config import DB_NAME
 from db import save_order_to_db
-from memory import (
-    get_all_memories, filter_memories_by_type, format_memories_as_context,
-    save_order_memory,
-)
+from memory import save_order_memory
 from search import (
     extract_search_keywords, extract_search_filters, detect_trending_intent,
     get_embedding, rerank_results, hybrid_search_products,
@@ -65,10 +62,6 @@ def discover_agent(state: ShopAgentState) -> ShopAgentState:
     user_preferences = user_profile_data.get("preferences", [])
     preference_context = "\n".join(user_preferences) if user_preferences else ""
 
-    all_memories = get_all_memories(user_id)
-    profiles = filter_memories_by_type(all_memories, ["profile"])
-    profile_memory_context = format_memories_as_context(profiles)
-
     # --- Regional trending ---
     use_trending = detect_trending_intent(user_query)
     user_geo = user_profile_data.get("location_geo")
@@ -97,8 +90,6 @@ def discover_agent(state: ShopAgentState) -> ShopAgentState:
         profile_context += f", {' '.join(fav_styles[:2])} style"
 
     enriched_query = user_query + profile_context
-    if profile_memory_context:
-        enriched_query += f" {profile_memory_context[:200]}"
     if preference_context:
         enriched_query += f" {preference_context[:200]}"
 

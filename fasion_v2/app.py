@@ -2,8 +2,9 @@
 """
 Shopping Guide AI (Fashion v2) — entry point.
 
-A fashion shopping-guide built on LangGraph + MongoDB Atlas + Mem0.
+A fashion shopping-guide built on LangGraph + MongoDB Atlas + Voyage AI + Azure OpenAI.
 Workflow: Search Products -> select products -> Place Order.
+Preferences are learned by the LLM and stored in users.preferences (no Mem0).
 
 Removed vs the original Fashion AI:
   - Outfit generation + AI outfit images (no Gemini / no OpenAI image calls)
@@ -23,7 +24,7 @@ from ui import create_gradio_app
 
 if __name__ == "__main__":
     print("=" * 40)
-    print("SHOPPING GUIDE AI — v2 (LangGraph + MongoDB + Mem0)")
+    print("SHOPPING GUIDE AI — v2 (LangGraph + MongoDB + Voyage + Azure OpenAI)")
     print("=" * 40)
     print("\n🚀 Starting server...\n")
 

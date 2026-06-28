@@ -1,100 +1,20 @@
 # memory.py
 """
-Long-term memory layer (Mem0) + preference extraction.
+Preference learning (no Mem0).
 
-Two storage layers, just like v1:
-  - Mem0 (fashion_memories collection): freeform facts/profile/feedback memories
-  - users.preferences array: distilled first-person preference statements
+After a purchase, an LLM distills durable preference statements from the bought
+items' attributes and stores them directly in the `users.preferences` array
+(pure MongoDB). These preferences later enrich the search query.
+
+This replaces the old Mem0 long-term memory store, which required extra Atlas
+Search/Vector indexes that don't fit the M0 free tier.
 """
 import json
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 from langchain_core.messages import HumanMessage
 
-import clients
-from clients import db, mem0_config, llm
-
-
-def _get_memory():
-    """Get or reinitialize the Mem0 memory instance (with a health check)."""
-    try:
-        clients.memory.vector_store.collection.database.client.admin.command("ping")
-        return clients.memory
-    except Exception:
-        print("🔄 Reinitializing Mem0 memory connection...")
-        from mem0 import Memory
-        clients.memory = Memory.from_config(mem0_config)
-        return clients.memory
-
-
-def add_memory(text: str, user_id: str, metadata: Optional[Dict] = None):
-    """Add a memory entry for a user."""
-    try:
-        _get_memory().add(text, user_id=user_id, metadata=metadata or {})
-        print(f"🧠 Memory added for {user_id}: {text[:80]}...")
-    except Exception as e:
-        print(f"⚠️ Failed to add memory: {e}")
-
-
-def _mem0_search(query: str, user_id: str, limit: int) -> list:
-    m = _get_memory()
-    try:
-        return m.search(query, user_id=user_id, limit=limit)
-    except Exception:
-        return m.search(query, filters={"user_id": user_id}, limit=limit)
-
-
-def _mem0_get_all(user_id: str) -> list:
-    m = _get_memory()
-    try:
-        return m.get_all(user_id=user_id)
-    except Exception:
-        return m.get_all(filters={"user_id": user_id})
-
-
-def search_memories(query: str, user_id: str, limit: int = 5) -> List[Dict]:
-    """Search memories relevant to a query for a specific user."""
-    try:
-        results = _mem0_search(query, user_id, limit)
-        memories = results.get("results", []) if isinstance(results, dict) else results
-        print(f"🧠 Memory search: {len(memories)} memories loaded for '{query[:50]}'")
-        return memories
-    except Exception as e:
-        print(f"⚠️ Memory search failed: {e}")
-        return []
-
-
-def get_all_memories(user_id: str) -> List[Dict]:
-    """Get all stored memories for a user."""
-    try:
-        results = _mem0_get_all(user_id)
-        memories = results.get("results", []) if isinstance(results, dict) else results
-        return memories
-    except Exception as e:
-        print(f"⚠️ Failed to get memories: {e}")
-        return []
-
-
-def format_memories_as_context(memories: List[Dict]) -> str:
-    """Format Mem0 entries into a text block for LLM context."""
-    if not memories:
-        return ""
-    lines = []
-    for m in memories:
-        text = m.get("memory", "") or m.get("text", "") or m.get("payload", {}).get("data", "")
-        if text:
-            lines.append(f"- {text}")
-    return "\n".join(lines)
-
-
-def filter_memories_by_type(memories: List[Dict], types: List[str]) -> List[Dict]:
-    """Filter memories to only include specific types (profile, fact, feedback)."""
-    filtered = []
-    for m in memories:
-        mtype = m.get("metadata", {}).get("type", "") or m.get("payload", {}).get("type", "")
-        if mtype in types:
-            filtered.append(m)
-    return filtered
+from clients import db, llm
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +22,8 @@ def filter_memories_by_type(memories: List[Dict], types: List[str]) -> List[Dict
 # ---------------------------------------------------------------------------
 
 def extract_preference_facts(user_id: str, context: str, event_type: str):
-    """Use the LLM to distill lasting preference statements from an event."""
+    """Use the LLM to distill lasting preference statements from an event,
+    then save the new ones to users.preferences (deduplicated)."""
     existing_prefs = []
     try:
         user_doc = db["users"].find_one({"user_id": user_id}, {"preferences": 1})
@@ -190,7 +111,8 @@ def _enrich_items_with_attributes(items: List[Dict]) -> List[Dict]:
 
 
 def save_order_memory(user_id: str, items: List[Dict], total: float):
-    """Save a purchase event as a fact + extract durable preferences.
+    """After a purchase, extract durable preferences and store them in
+    users.preferences (pure MongoDB + LLM, no Mem0).
 
     Item attributes (colour / category / usage / season) are looked up from the
     products collection so the LLM can learn colour/style/category preferences,
@@ -198,9 +120,6 @@ def save_order_memory(user_id: str, items: List[Dict], total: float):
     """
     enriched = _enrich_items_with_attributes(items)
 
-    items_desc = ", ".join(
-        [f"{i.get('product_name','')}: ${i.get('price',0):.2f}" for i in items]
-    )
     # Attribute-rich description for the preference extractor
     attr_lines = []
     for i in enriched:
@@ -220,11 +139,6 @@ def save_order_memory(user_id: str, items: List[Dict], total: float):
     attr_block = "\n".join(attr_lines)
 
     avg_price = total / len(items) if items else 0
-    add_memory(
-        f"I purchased {items_desc} for ${total:.2f} total.",
-        user_id,
-        metadata={"type": "fact", "source": "order"},
-    )
     context = (
         f"User PURCHASED {len(items)} item(s) for ${total:.2f} total "
         f"(average ${avg_price:.2f} per item). This is a confirmed purchase, "
@@ -233,18 +147,3 @@ def save_order_memory(user_id: str, items: List[Dict], total: float):
     )
     print(f"🧠 Order context: {context[:160]}")
     extract_preference_facts(user_id, context, "order")
-
-
-def save_user_profile_memory(user_id: str, profile: Dict):
-    """Save the user profile to Mem0 (idempotent-ish; Mem0 dedupes)."""
-    gender = profile.get("gender", "unknown")
-    age = profile.get("age", "unknown")
-    location = profile.get("location", "unknown")
-    colors = ", ".join(profile.get("favorite_colors", []) or ["not specified"])
-    styles = ", ".join(profile.get("favorite_styles", []) or ["not specified"])
-    text = (
-        f"I am {gender}, {age} years old, living in {location}. "
-        f"My favorite colors are {colors}. "
-        f"I prefer {styles} style clothing."
-    )
-    add_memory(text, user_id, metadata={"type": "profile"})

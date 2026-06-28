@@ -4,7 +4,9 @@ Run the **Fashion AI shopping-guide agent** on your own machine, backed by your
 own free MongoDB Atlas cluster.
 
 **Stack:** LangGraph · MongoDB Atlas (Vector + full-text search) · Voyage AI
-(embeddings + rerank) · Azure OpenAI · Mem0. The app lives in `fasion_v2/`.
+(embeddings + rerank) · Azure OpenAI (GPT-4o). The app lives in `fasion_v2/`.
+Preferences are learned by the LLM and stored in `users.preferences` (no Mem0),
+so the app only needs **2 Atlas Search indexes** — fits the M0 free tier.
 
 You will:
 1. Create a free MongoDB Atlas cluster
@@ -101,8 +103,8 @@ pip install -r requirements.txt
 
    This loads 3 collections: `products` (~30k items), `users`, `orders`.
 
-> ℹ️ `fashion_memories` and `checkpoints_v2` are **not** in the bundle — the app
-> creates them automatically on first use.
+> ℹ️ `checkpoints_v2` is **not** in the bundle — the app (LangGraph) creates it
+> automatically on first use. There is no `fashion_memories` collection (no Mem0).
 
 ---
 
@@ -138,8 +140,7 @@ cp .env.example .env
 Open `.env` and fill in:
 - `MONGODB_URI` — your Atlas string (Step 1)
 - `VOYAGE_API_KEY` — your Voyage key (Step 2)
-- `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_EM_KEY`,
-  `AZURE_EM_ENDPOINT` — provided by the instructor
+- `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` — provided by the instructor
 
 ---
 
@@ -205,4 +206,5 @@ Open **http://localhost:7861/** and try a search like
 3. Push code + workshop materials to `renzhencarly-jpg/fashion-ai-workshop`
    (the real `.env` and `demo_dump/` are gitignored — never commit them).
 
-4. Share the 4 Azure values with participants privately at the workshop.
+4. Share the 2 Azure OpenAI values (key + endpoint) with participants privately
+   at the workshop.

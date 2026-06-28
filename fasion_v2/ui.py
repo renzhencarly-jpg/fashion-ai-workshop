@@ -17,7 +17,6 @@ import gradio as gr
 
 from agents import graph_app, checkout_agent
 from db import get_user_profile, get_active_session, save_active_session, get_user_orders
-from memory import get_all_memories, save_user_profile_memory
 from formatters import format_profile_html, format_orders_history_html
 
 
@@ -198,13 +197,10 @@ def stage_search(state_dict, user_id: str, query: str, new_session: bool, existi
             yield out(status, "", [], 1, [], "", {})
             return
 
-        save_user_profile_memory(user_id, user_profile)
         profile_html = format_profile_html(user_profile)
-        user_memories = get_all_memories(user_id)
         status += (
             f"✅ Profile loaded: {user_profile.get('username')}\n"
-            f"🧠 {len(user_memories)} memories, "
-            f"{len(user_profile.get('preferences', []))} preferences\n"
+            f"🧠 {len(user_profile.get('preferences', []))} preferences\n"
         )
         state_dict.update({
             "user_id": user_id.strip(),
@@ -409,7 +405,7 @@ def create_gradio_app():
 
         gr.Markdown(
             """<div style="display:flex; justify-content:space-between; align-items:center;">
-<span style="font-size:18px;font-weight:bold;">🛍️ Shopping Guide AI <span style='font-weight:normal;color:#666;font-size:14px'>· v2 · LangGraph + MongoDB + Mem0</span></span>
+<span style="font-size:18px;font-weight:bold;">🛍️ Shopping Guide AI <span style='font-weight:normal;color:#666;font-size:14px'>· v2 · LangGraph + MongoDB + Voyage</span></span>
 </div>"""
         )
 
@@ -523,7 +519,7 @@ def create_gradio_app():
             """
             ---
             **Flow:** Search → tick products → Add to Cart → Place Order → review summary → ✅ Confirm &nbsp;|&nbsp;
-            LangGraph · MongoDB · Azure OpenAI · Voyage AI · Mem0
+            LangGraph · MongoDB · Azure OpenAI · Voyage AI
             """
         )
 
