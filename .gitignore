@@ -1,0 +1,32 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+setup_secrets.sh
+
+# Workshop demo data (distributed via Drive, never committed)
+demo_dump/
+*.tar.gz
+fashion_demo_data*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Gradio
+.gradio/
+
+# Video files (large)
+*.mp4
+
+# Misc
+.DS_Store
+*.bak
